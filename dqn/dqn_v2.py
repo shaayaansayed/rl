@@ -88,14 +88,13 @@ class Network() :
             self.target_l4, self.target_w['l4_w'], self.target_w['l4_b'] = linear(self.target_l3, output_dim=1024)
             self.target_q, self.target_w['pred_q_w'], self.target_w['pred_q_b'] = linear(self.target_l4, output_dim=self.num_actions)
 
-
         with tf.variable_scope('pred_to_target') :
-            self.target_w = {}
-            self.target_w_assign_op = {}
+            self.pred2target_input = {}
+            self.pred2target_assign_op = {}
 
             for name, w in self.target_w.keys() :
-                self.target_w[name] = tf.placeholder(tf.float32, shape=w.get_shape().as_list(), name=name)
-                self.target_w_assign_op[name] = w.assign(self.target_w[name])
+                self.pred2target_input[name] = tf.placeholder(tf.float32, shape=w.get_shape().as_list(), name=name)
+                self.pred2target_assign_op[name] = w.assign(self.pred2target_input[name]))
 
         with tf.variable_scope('optimizer') :
             self.td_target = tf.placeholder(tf.float32, [None], name='target_q')
@@ -124,6 +123,11 @@ class Network() :
     def update(self, obs, td_target, action_ix) :
         loss, _ = self.sess.run([self.loss, self.train_op], {self.obs:obs, self.td_target: td_target, self.action_ix: action_ix})
         return loss
+
+    def update_target_network(self) :
+        for w in self.w.keys() :
+            sess.run(self.pred2target_assign_op[w], {self.pred2target_input[w] : self.w[w].eval()})
+
 
 class ObsProcessor() :
 
@@ -194,6 +198,9 @@ def run_Q_learning(args) :
         while not done :
             iter_ix = iter_ix + 1
 
+            if iter_ix % args.update_target_every == 0 :
+                net.update_target_network()
+
             A_t = pi(sess, obs_t)
             obs_tp1, R_tp1, done, info = env.step(A_t)
             replay_memory.append([obs_t, A_t, obs_tp1, R_tp1, float(done)])
@@ -221,6 +228,7 @@ if __name__ == '__main__' :
     parser.add_argument('-ep', default=.1, dest='ep', type=float)
     parser.add_argument('-summary_dir', default="./summary/", dest='summary_dir', type=str)
     parser.add_argument('-num_episodes', default=16, dest='num_episodes', type=int)
+    parser.add_argument('-update_target_every', default=1000, dest='update_target_every', type=int)
     parser.add_argument('-discount_factor', default=.99, dest='discount_factor', type=float)
 
     args = parser.parse_args()
