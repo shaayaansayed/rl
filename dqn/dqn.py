@@ -171,13 +171,15 @@ def run_Q_learning(args) :
 
             obs_t = processor.preprocess(sess, obs_tp1)
 
+            print('{} iter : {}'.format(iter_ix, loss))
+
             ep_reward += R_tp1
             ep_length += 1
 
 
         ep_summary = tf.Summary(value =[tf.Summary.Value(tag='ep_reward', simple_value=ep_reward), 
                                          tf.Summary.Value(tag='ep_length', simple_value=ep_length)])
-        Q_net.fw.add_summary(ep_summary)
+        Q_net.fw.add_summary(ep_summary, global_step=iter_ix)
         Q_net.fw.flush()
 
 if __name__ == '__main__' :
