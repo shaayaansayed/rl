@@ -60,6 +60,8 @@ class Network() :
         if self.fw :
             self.fw.add_summary(summaries, global_step)
 
+        return loss 
+
 class ObsProcessor() :
 
     def __init__(self) :
