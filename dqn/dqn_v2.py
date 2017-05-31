@@ -83,7 +83,7 @@ class Network() :
         self.pred_w = {}
         with tf.variable_scope('prediction') :
 
-            self.obs = tf.placeholder(tf.float32, [None, self.img_size[0], self.img_size[1], 1], name='obs')
+            self.obs = tf.placeholder(tf.float32, [None, self.img_size[0], self.img_size[1], 4], name='obs')
 
             self.l1, self.pred_w['l1_w'], self.pred_w['l1_b'] = conv2d(self.obs, output_dim=32, kernel_size=[8, 8], stride=[4, 4], name='l1')
             self.l2, self.pred_w['l2_w'], self.pred_w['l2_b'] = conv2d(self.l1, output_dim=64, kernel_size=[4, 4], stride=[2, 2], name='l2')
@@ -98,7 +98,7 @@ class Network() :
         self.target_w = {}
         with tf.variable_scope('target') :
 
-            self.target_obs = tf.placeholder(tf.float32, [None, self.img_size[0], self.img_size[1], 1], name='obs')
+            self.target_obs = tf.placeholder(tf.float32, [None, self.img_size[0], self.img_size[1], 4], name='obs')
             self.target_l1, self.target_w['l1_w'], self.target_w['l1_b'] = conv2d(self.target_obs, output_dim=32, kernel_size=[8, 8], stride=[4, 4], name='l1')
             self.target_l2, self.target_w['l2_w'], self.target_w['l2_b'] = conv2d(self.target_l1, output_dim=64, kernel_size=[4, 4], stride=[2, 2], name='l2')
             self.target_l3, self.target_w['l3_w'], self.target_w['l3_b'] = conv2d(self.target_l2, output_dim=64, kernel_size=[4, 4], stride=[2, 2], name='l3')
@@ -178,7 +178,7 @@ class ObsProcessor() :
         grayscale = tf.image.rgb_to_grayscale(self.raw_imgs)
         resized = tf.image.resize_images(
                         grayscale, [84, 84], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
-        self.output = tf.cast(resized, tf.float32)
+        self.output = tf.cast(tf.squeeze(resized, axis=2), tf.float32)
 
     def preprocess(self, obs, create_summary=False) :
 
@@ -227,14 +227,16 @@ def run_Q_learning(args) :
     while len(replay_memory) < args.init_replay_size :
         done = False
         obs_t = env.reset()
-        obs_t = processor.preprocess(obs_t)
+        obs_t = processor.preprocess(obs_t) # obs_t is 84x84
+        s_t = np.stack([obs_t] * 4, axis=2) # s_t  is 84x84x4
         while not done :
-            A_t = pi(obs_t, 1.0)
+            A_t = pi(s_t, 1.0)
             obs_tp1, R_tp1, done, info = env.step(A_t)
             obs_tp1 = processor.preprocess(obs_tp1)
-            replay_memory.append([obs_t, A_t, obs_tp1, R_tp1, float(done)])
+            s_tp1 = np.append(s_t[:,:,1:], np.expand_dims(obs_tp1, 2), axis=2)
+            replay_memory.append([s_t, A_t, s_tp1, R_tp1, float(done)])
 
-            obs_t = obs_tp1
+            s_t = s_tp1
 
     iter_ix = 0
     total_loss = 0.
@@ -243,6 +245,7 @@ def run_Q_learning(args) :
         done = False
         obs_t = env.reset()
         obs_t = processor.preprocess(obs_t)
+        s_t = np.stack([obs_t] * 4, axis=2)
         while not done :
             iter_ix = iter_ix + 1
 
@@ -251,10 +254,11 @@ def run_Q_learning(args) :
 
             ep = args.ep_end if iter_ix > len(epsilons) else epsilons[iter_ix]
 
-            A_t = pi(obs_t, ep)
+            A_t = pi(s_t, ep)
             obs_tp1, R_tp1, done, info = env.step(A_t)
             obs_tp1 = processor.preprocess(obs_tp1)
-            replay_memory.append([obs_t, A_t, obs_tp1, R_tp1, float(done)])
+            s_tp1 = np.append(s_t[:,:,1:], np.expand_dims(obs_tp1, 2), axis=2)
+            replay_memory.append([s_t, A_t, s_tp1, R_tp1, float(done)])
 
             # sample minibatch from replay_memory
             replay_sample = random.sample(replay_memory, args.batch_size)
@@ -270,7 +274,7 @@ def run_Q_learning(args) :
 
             net.inject_summary({'loss': loss, 'avg_loss': total_loss/iter_ix}, iter_ix)
 
-            obs_t = obs_tp1
+            s_t = s_tp1
 
             if iter_ix % args.print_every == 0 : 
                 print('{} iter : {}'.format(iter_ix, loss))
