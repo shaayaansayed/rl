@@ -126,7 +126,7 @@ class Network() :
             self.chosen_actions_vals = tf.gather(tf.reshape(self.q, [-1]), gather_ix)
 
             self.loss = tf.reduce_mean(clipped_error(self.td_target - self.chosen_actions_vals))
-            optimizer = tf.train.RMSPropOptimizer(0.00025, momentum=0.95, epsilon=0.01)
+            optimizer = tf.train.RMSPropOptimizer(0.00025, momentum=0.95, epsilon=0.01 )
             self.train_op = optimizer.minimize(self.loss, global_step=global_step)
 
         scalar_summary_tags = ['loss', 'avg_loss']
@@ -194,8 +194,8 @@ class ObsProcessor() :
 
         return preprocessed
 
-def init_greedy_pi(Qnet, num_actions, ep) :
-    def pi(obs) :
+def init_greedy_pi(Qnet, num_actions) :
+    def pi(obs, ep) :
 
         Qs = Qnet.predict(obs)
         greedy_action = np.argmax(Qs)
@@ -217,7 +217,9 @@ def run_Q_learning(args) :
     processor = ObsProcessor(sess)
     net = Network(sess, num_actions, [84, 84], args.summary_dir)
 
-    pi = init_greedy_pi(net, num_actions, args.ep)
+    pi = init_greedy_pi(net, num_actions)
+
+    epsilons = np.linspace(1.0, args.ep_end, args.ep_decay_steps)
 
     # populate initial replay memory
 
@@ -227,14 +229,14 @@ def run_Q_learning(args) :
         obs_t = env.reset()
         obs_t = processor.preprocess(obs_t)
         while not done :
-            A_t = pi(obs_t)
+            A_t = pi(obs_t, 1.0)
             obs_tp1, R_tp1, done, info = env.step(A_t)
             obs_tp1 = processor.preprocess(obs_tp1)
             replay_memory.append([obs_t, A_t, obs_tp1, R_tp1, float(done)])
 
             obs_t = obs_tp1
 
-    iter_ix = 0.
+    iter_ix = 0
     total_loss = 0.
     for ix in range(args.num_episodes) :
 
@@ -247,7 +249,9 @@ def run_Q_learning(args) :
             if iter_ix % args.update_target_every == 0 :
                 net.update_target_network()
 
-            A_t = pi(obs_t)
+            ep = args.ep_end if iter_ix > len(epsilons) else epsilons[iter_ix]
+
+            A_t = pi(obs_t, ep)
             obs_tp1, R_tp1, done, info = env.step(A_t)
             obs_tp1 = processor.preprocess(obs_tp1)
             replay_memory.append([obs_t, A_t, obs_tp1, R_tp1, float(done)])
@@ -276,12 +280,14 @@ if __name__ == '__main__' :
 
     parser.add_argument('-batch_size', default=4, dest='batch_size', type=int)
     parser.add_argument('-init_replay_size', default=64, dest='init_replay_size', type=int)
-    parser.add_argument('-ep', default=.1, dest='ep', type=float)
     parser.add_argument('-summary_dir', default="./summary/", dest='summary_dir', type=str)
     parser.add_argument('-num_episodes', default=16, dest='num_episodes', type=int)
     parser.add_argument('-update_target_every', default=1000, dest='update_target_every', type=int)
     parser.add_argument('-discount_factor', default=.99, dest='discount_factor', type=float)
     parser.add_argument('-print_every', default=1000, dest='print_every', type=int)
+
+    parser.add_argument('-ep_end', default=.1, dest='ep_end', type=float)
+    parser.add_argument('-ep_decay_steps', default=500000, dest='ep_decay_steps', type=int)
 
     args = parser.parse_args()
 
