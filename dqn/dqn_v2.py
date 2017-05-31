@@ -5,7 +5,7 @@ import random
 import argparse
 
 from StringIO import StringIO
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt 
 
 def conv2d(x,
            output_dim,
@@ -147,8 +147,8 @@ class Network() :
         return loss
 
     def update_target_network(self) :
-        for w in self.w.keys() :
-            self.sess.run(self.pred2target_assign_op[w], {self.pred2target_input[w] : self.w[w].eval()})
+        for w in self.pred_w.keys() :
+            self.sess.run(self.pred2target_assign_op[w], {self.pred2target_input[w] : self.sess.run(self.pred_w[w])})
 
     def inject_summary(self, summary_dict, step) :
 
