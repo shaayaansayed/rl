@@ -132,6 +132,7 @@ class Network() :
                 self.summary_placeholders[tag] = tf.placeholder(tf.float32, None)
                 self.summary_ops[tag] = tf.summary.scalar(tag, self.summary_placeholders[tag])
 
+        self.sess.run(tf.global_variables_initializer())
         self.update_target_network()
 
     def predict(self, obs) :
@@ -208,8 +209,6 @@ def run_Q_learning(args) :
 
     processor = ObsProcessor(sess)
     net = Network(sess, num_actions, [84, 84], args.summary_dir)
-
-    sess.run(tf.global_variables_initializer())
 
     pi = init_greedy_pi(net, num_actions, args.ep)
 
