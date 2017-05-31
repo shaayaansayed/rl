@@ -7,6 +7,8 @@ import argparse
 from StringIO import StringIO
 import matplotlib.pyplot as plt
 
+tf.set_random_seed(123)
+
 def conv2d(x,
            output_dim,
            kernel_size,
