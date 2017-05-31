@@ -248,7 +248,7 @@ def run_Q_learning(args) :
 
             # compute TD targets using target network 
             target_Qs = net.predict_target(obs_tp1_batch)
-            max_Qs = np.amax(target_Qs, axis=1)
+            max_Qs = np.max(target_Qs, axis=1)
             td_targets = R_batch + (1. - done_batch) * args.discount_factor * max_Qs
 
             loss = net.update(obs_batch, td_targets, A_batch)
@@ -258,7 +258,8 @@ def run_Q_learning(args) :
 
             obs_t = obs_tp1
 
-            print('{} iter : {}'.format(iter_ix, loss))
+            if iter_ix % args.print_every == 0 : 
+                print('{} iter : {}'.format(iter_ix, loss))
 
 if __name__ == '__main__' :
     parser = argparse.ArgumentParser(description='arguments for dqn')
@@ -270,6 +271,7 @@ if __name__ == '__main__' :
     parser.add_argument('-num_episodes', default=16, dest='num_episodes', type=int)
     parser.add_argument('-update_target_every', default=1000, dest='update_target_every', type=int)
     parser.add_argument('-discount_factor', default=.99, dest='discount_factor', type=float)
+    parser.add_argument('-print_every', default=1000, dest='print_every', type=int)
 
     args = parser.parse_args()
 
