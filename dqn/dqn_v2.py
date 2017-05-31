@@ -132,6 +132,8 @@ class Network() :
                 self.summary_placeholders[tag] = tf.placeholder(tf.float32, None)
                 self.summary_ops[tag] = tf.summary.scalar(tag, self.summary_placeholders[tag])
 
+        self.update_target_network()
+
     def predict(self, obs) :
         net_input = obs 
         if obs.ndim == 3 :
