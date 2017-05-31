@@ -9,6 +9,13 @@ import matplotlib.pyplot as plt
 
 tf.set_random_seed(123)
 
+def clipped_error(x):
+  # Huber loss
+  try:
+    return tf.select(tf.abs(x) < 1.0, 0.5 * tf.square(x), tf.abs(x) - 0.5)
+  except:
+    return tf.where(tf.abs(x) < 1.0, 0.5 * tf.square(x), tf.abs(x) - 0.5)
+
 def conv2d(x,
            output_dim,
            kernel_size,
@@ -106,9 +113,9 @@ class Network() :
             self.pred2target_input = {}
             self.pred2target_assign_op = {}
 
-            for name, w in self.target_w.iteritems() :
-                self.pred2target_input[name] = tf.placeholder(tf.float32, shape=w.get_shape().as_list(), name=name)
-                self.pred2target_assign_op[name] = w.assign(self.pred2target_input[name])
+            for name, target_w in self.target_w.iteritems() :
+                self.pred2target_input[name] = tf.placeholder(tf.float32, shape=target_w.get_shape().as_list(), name=name)
+                self.pred2target_assign_op[name] = tf.assign(target_w, self.pred2target_input[name])
 
         with tf.variable_scope('optimizer') :
             self.td_target = tf.placeholder(tf.float32, [None], name='target_q')
@@ -116,10 +123,10 @@ class Network() :
 
             batch_size = tf.shape(self.q)[0]
             gather_ix = tf.range(batch_size) * self.num_actions + self.action_ix
-            self.chosen_actions = tf.gather(tf.reshape(self.q, [-1]), gather_ix)
+            self.chosen_actions_vals = tf.gather(tf.reshape(self.q, [-1]), gather_ix)
 
-            self.loss = tf.reduce_mean(tf.squared_difference(self.td_target, self.chosen_actions))
-            optimizer = tf.train.RMSPropOptimizer(0.00025, 0.99, 0.0, 1e-6)
+            self.loss = tf.reduce_mean(clipped_error(self.td_target - self.chosen_actions_vals))
+            optimizer = tf.train.RMSPropOptimizer(0.00025, momentum=0.95, epsilon=0.01)
             self.train_op = optimizer.minimize(self.loss, global_step=global_step)
 
         scalar_summary_tags = ['loss', 'avg_loss']
