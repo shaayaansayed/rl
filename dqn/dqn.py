@@ -11,7 +11,7 @@ from utils import net
 
 tf.set_random_seed(123)
 
-class Network() :
+class DQN() :
 
     def __init__(self, sess, num_actions, img_size, summary_dir=None) :
         self.sess = sess 
@@ -135,7 +135,7 @@ class ObsProcessor() :
 
         if create_summary :
             s = StringIO()
-            plt.imsave(s, np.squeeze(preprocessed, axis=2) , format='png')
+            plt.imsave(s, np.squeeze(preprocessed, axis=2), format='png')
             img_summary = tf.Summary.Image(encoded_image_string=s.getvalue(),
                                            height=preprocessed.shape[0],
                                            width=preprocessed.shape[1])
@@ -158,34 +158,46 @@ def init_greedy_pi(Qnet, num_actions) :
 def run_Q_learning(args) :
 
     env = gym.make('Breakout-v0')
-
     num_actions = env.action_space.n
 
     sess = tf.Session()
 
     processor = ObsProcessor(sess)
-    net = Network(sess, num_actions, [84, 84], args.summary_dir)
-
-    pi = init_greedy_pi(net, num_actions)
-
+    dqn = DQN(sess, num_actions, [args.state_size, args.state_size], args.summary_dir)
+    pi = init_greedy_pi(dqn, num_actions)
     epsilons = np.linspace(1.0, args.ep_end, args.ep_decay_steps)
 
     # populate initial replay memory
 
+    # replay_memory = []
+    # while len(replay_memory) < args.init_replay_size :
+    #     # start of episode initialization
+    #     s_t = np.stack([np.zeros(args.state_size, args.state_size)] * 4, axis=2) 
+    #     done = False
+
+    #     # start episode
+    #     obs_t = env.reset()
+    #     obs_t = processor.preprocess(obs_t) 
+    #     s_t = np.append(s_t[:,:,1:], np.expand_dims(s_t, 2), axis=2)
+    #     while not done :
+    #         A_t = pi(s_t, 1.0)
+    #         obs_tp1, R_tp1, done, info = env.step(A_t)
+    #         obs_tp1 = processor.preprocess(obs_tp1)
+    #         s_tp1 = np.append(s_t[:,:,1:], np.expand_dims(obs_tp1, 2), axis=2)
+    #         replay_memory.append([s_t, A_t, s_tp1, R_tp1, float(done)])
+
+    #         s_t = s_tp1
+
     replay_memory = []
     while len(replay_memory) < args.init_replay_size :
-        done = False
-        obs_t = env.reset()
-        obs_t = processor.preprocess(obs_t) # obs_t is 84x84
-        s_t = np.stack([obs_t] * 4, axis=2) # s_t  is 84x84x4
-        while not done :
-            A_t = pi(s_t, 1.0)
-            obs_tp1, R_tp1, done, info = env.step(A_t)
-            obs_tp1 = processor.preprocess(obs_tp1)
-            s_tp1 = np.append(s_t[:,:,1:], np.expand_dims(obs_tp1, 2), axis=2)
-            replay_memory.append([s_t, A_t, s_tp1, R_tp1, float(done)])
+        s_t = np.stack([np.zeros(args.state_size, args.state_size)] * 4, axis=2)
+        done = False 
 
-            s_t = s_tp1
+        obs_t = env.reset()
+        obs_t = processor.preprocess(obs_t)
+        frame_count = 1 
+        while True :
+            
 
     iter_ix = 0
     total_loss = 0.
@@ -199,7 +211,7 @@ def run_Q_learning(args) :
             iter_ix = iter_ix + 1
 
             if iter_ix % args.update_target_every == 0 :
-                net.update_target_network()
+                dqn.update_target_network()
 
             ep = args.ep_end if iter_ix > len(epsilons) else epsilons[iter_ix]
 
@@ -214,14 +226,14 @@ def run_Q_learning(args) :
             obs_batch, A_batch, obs_tp1_batch, R_batch, done_batch = map(np.array, zip(*replay_sample))
 
             # compute TD targets using target network 
-            target_Qs = net.predict_target(obs_tp1_batch)
+            target_Qs = dqn.predict_target(obs_tp1_batch)
             max_Qs = np.max(target_Qs, axis=1)
             td_targets = R_batch + (1. - done_batch) * args.discount_factor * max_Qs
 
-            loss = net.update(obs_batch, td_targets, A_batch)
+            loss = dqn.update(obs_batch, td_targets, A_batch)
             total_loss += loss 
 
-            net.inject_summary({'loss': loss, 'avg_loss': total_loss/iter_ix}, iter_ix)
+            dqn.inject_summary({'loss': loss, 'avg_loss': total_loss/iter_ix}, iter_ix)
 
             s_t = s_tp1
 
@@ -232,15 +244,17 @@ if __name__ == '__main__' :
     parser = argparse.ArgumentParser(description='arguments for dqn')
 
     parser.add_argument('-batch_size', default=4, dest='batch_size', type=int)
-    parser.add_argument('-init_replay_size', default=64, dest='init_replay_size', type=int)
-    parser.add_argument('-summary_dir', default="./summary/", dest='summary_dir', type=str)
     parser.add_argument('-num_episodes', default=16, dest='num_episodes', type=int)
-    parser.add_argument('-update_target_every', default=1000, dest='update_target_every', type=int)
     parser.add_argument('-discount_factor', default=.99, dest='discount_factor', type=float)
-    parser.add_argument('-print_every', default=1000, dest='print_every', type=int)
-
+    parser.add_argument('-init_replay_size', default=64, dest='init_replay_size', type=int)
+    parser.add_argument('-update_target_every', default=1000, dest='update_target_every', type=int)
     parser.add_argument('-ep_end', default=.1, dest='ep_end', type=float)
     parser.add_argument('-ep_decay_steps', default=500000, dest='ep_decay_steps', type=int)
+    parser.add_argument('-frame_skip', default=4, dest='frame_skip', type=int)
+    parser.add_argument('-state_size', default=84, dest='init_replay_size', type=int)
+
+    parser.add_argument('-summary_dir', default="./summary/", dest='summary_dir', type=str)
+    parser.add_argument('-print_every', default=1000, dest='print_every', type=int)
 
     args = parser.parse_args()
 
